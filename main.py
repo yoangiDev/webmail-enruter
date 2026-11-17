@@ -11,15 +11,8 @@ import sys
 import time
 from email.message import EmailMessage
 from email.policy import default
-from pathlib import Path
 
-# Carga .env (CLAVE=valor) sin dependencias extra
-_env = Path(__file__).with_name(".env")
-if _env.exists():
-    for _linea in _env.read_text(encoding="utf-8").splitlines():
-        if "=" in _linea and not _linea.lstrip().startswith("#"):
-            _k, _v = _linea.split("=", 1)
-            os.environ.setdefault(_k.strip(), _v.strip())
+from router import DEPARTAMENTOS, FALLBACK, enrutar  # también carga .env
 
 
 def cfg(clave: str, por_defecto: str | None = None) -> str:
@@ -35,9 +28,7 @@ SMTP_PORT = int(cfg("SMTP_PORT", "465"))  # ponytail: solo SSL (465); STARTTLS (
 USUARIO = cfg("EMAIL_USUARIO")
 CLAVE = cfg("EMAIL_CLAVE")
 INTERVALO = int(cfg("INTERVALO_SEGUNDOS", "60"))
-
-from router import DEPARTAMENTOS, FALLBACK, enrutar  # noqa: E402  (carga el modelo; tras validar config)
-
+cfg("DEEPSEEK_API_KEY")
 DESTINOS = {d: cfg(f"DESTINO_{d.upper()}") for d in [*DEPARTAMENTOS, FALLBACK]}
 
 
@@ -73,10 +64,10 @@ def procesar() -> None:
                 # PEEK: no se marca como leído hasta reenviarlo con éxito (si falla, se reintenta)
                 _, partes = imap.fetch(num, "(BODY.PEEK[])")
                 msg = email.message_from_bytes(partes[0][1], policy=default)
-                dep, score = enrutar(msg["Subject"] or "", cuerpo(msg))
+                dep = enrutar(msg["Subject"] or "", cuerpo(msg))
                 smtp.send_message(reenvio(msg, dep))
                 imap.store(num, "+FLAGS", "\\Seen")
-                print(f"{dep:12} {score:.2f}  {msg['From']} | {msg['Subject']}")
+                print(f"{dep:12} {msg['From']} | {msg['Subject']}")
             except Exception as e:
                 print(f"Error con el mensaje {num.decode()}: {e}")
 
